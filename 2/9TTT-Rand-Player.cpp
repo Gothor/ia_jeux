@@ -1,9 +1,12 @@
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <string.h>
 #include <string>
 #include <vector>
+
+#define ERROR -1
 
 #define EMPTY '.'
 #define X_PLAYER 'x'
@@ -14,15 +17,160 @@ struct NTTT_t {
 
   char mBoard[9];
   char board[81];
+  int lastMove;
+  std::vector<int> nextMoves;
 
-  NTTT_t(): mBoard{}, board{} {
+  NTTT_t(): mBoard{}, board{}, lastMove(-1), nextMoves() {}
+
+  void init() {
+    std::memset(mBoard, EMPTY, sizeof mBoard);
+    std::memset(board, EMPTY, sizeof board);
+    lastMove = -1;
+    nextMoves.clear();
+    for (int i = 0; i < 81; i++) {
+      nextMoves.push_back(i);
+    }
+  }
+
+  int genmove() {
+    if (nextMoves.size() == 0)
+      return ERROR;
+
+    int i = rand() * 1.0 / RAND_MAX * nextMoves.size();
+    return nextMoves[i];
+  }
+
+  bool isValidPosition(int pos) {
+    for (std::vector<int>::iterator it = nextMoves.begin(); it != nextMoves.end(); ++it) {
+      if (pos == *it) return true;
+    }
+
+    return false;
+  }
+
+  void updateNextMoves() {
+    nextMoves.clear();
+
+    if (endgame()) return;
+
+    int x = lastMove % 3;
+    int y = (lastMove % 27) / 9;
+    int tl = y * 27 + x * 3;
+    int mPos = (lastMove / 27) * 3 + (lastMove % 9) / 3;
+
+    if (mBoard[mPos] == EMPTY) {
+      // Look for empty cell in the target grid
+      for (int y = 0; y < 3; y++) {
+        for (int x = 0; x < 3; x++) {
+          if (board[tl + y * 9 + x] == EMPTY) {
+            nextMoves.push_back(tl + y * 9 + x);
+          }
+        }
+      }
+
+      if (nextMoves.size() != 0) return;
+    }
+
+    // If empty => you can play on any empty cell
+    for (int i = 0; i < 81; i++) {
+      //fprintf(stderr, "- %d => %d (%c)\n", i, (i / 27) * 3 + (i % 9) / 3, mBoard[(i / 27) * 3 + (i % 9) / 3]);
+      if (board[i] == EMPTY && mBoard[(i / 27) * 3 + (i % 9) / 3] == EMPTY) {
+        fprintf(stderr, "  => push %d\n", i);
+        nextMoves.push_back(i);
+      }
+    }
+  }
+
+  void checkMetaBoard() {
+    // Get top left position of the last move grid
+    int tl = lastMove - lastMove % 27 + lastMove % 9 - lastMove % 3;
+    int mp = tl + 10;
+    int br = tl + 20;
+    int mPos = (lastMove / 27) * 3 + (lastMove % 9) / 3;
+
+    if (mBoard[mPos] != EMPTY) return;
+
+    // Check all lines
+    if (board[tl] != EMPTY) {
+      if ((board[tl] == board[tl+1] && board[tl] == board[tl+2])
+        || (board[tl] == board[tl+9] && board[tl] == board[tl+18])
+        || (board[tl] == board[tl+10] && board[tl] == board[tl+20])) {
+        mBoard[mPos] = board[tl];
+        return;
+      }
+    }
+    if (board[mp] != EMPTY) {
+      if ((board[mp] == board[mp-9] && board[mp] == board[mp+9])
+        || (board[mp] == board[mp-8] && board[mp] == board[mp+8])
+        || (board[mp] == board[mp-1] && board[mp] == board[mp+1])) {
+        mBoard[mPos] = board[mp];
+        return;
+      }
+    }
+    if (board[br] != EMPTY) {
+      if ((board[br] == board[br-9] && board[br] == board[br-18])
+        || (board[br] == board[br-2] && board[br] == board[br-1])) {
+        mBoard[mPos] = board[br];
+        return;
+      }
+    }
+
+    // Look for empty cell
+    for (int i = 0; i < 3; i++) {
+      if (board[tl+i] == EMPTY || board[tl+9+i] == EMPTY || board[tl+18+i] == EMPTY)
+        return;
+    }
+
+    // TIED GRID !
+    mBoard[mPos] = TIE;
+  }
+
+  bool play(int pos) {
+    char current = ((lastMove == -1) || (board[lastMove] == O_PLAYER) ? X_PLAYER : O_PLAYER);
+
+    if (!isValidPosition(pos)) {
+      return false;
+    }
+
+    board[pos] = current;
+    lastMove = pos;
+    checkMetaBoard();
+    updateNextMoves();
+    
+    return true;
+  }
+
+  bool endgame() {
+    // Check all lines
+    if (mBoard[0] != EMPTY) {
+      if ((mBoard[0] == mBoard[1] && mBoard[0] == mBoard[2])
+        || (mBoard[0] == mBoard[3] && mBoard[0] == mBoard[6])
+        || (mBoard[0] == mBoard[4] && mBoard[0] == mBoard[8])) {
+        return true;
+      }
+    }
+    if (mBoard[4] != EMPTY) {
+      if ((mBoard[4] == mBoard[1] && mBoard[4] == mBoard[7])
+        || (mBoard[4] == mBoard[2] && mBoard[4] == mBoard[6])
+        || (mBoard[4] == mBoard[3] && mBoard[4] == mBoard[5])) {
+        return true;
+      }
+    }
+    if (mBoard[8] != EMPTY) {
+      if ((mBoard[8] == mBoard[5] && mBoard[8] == mBoard[2])
+        || (mBoard[8] == mBoard[6] && mBoard[8] == mBoard[7])) {
+        return true;
+      }
+    }
+
+    // Look for empty cell
     for (int i = 0; i < 9; i++) {
-      mBoard[i] = EMPTY;
-      board[i] = EMPTY;
+      if (mBoard[i] == EMPTY)
+        return false;
     }
-    for (int i = 9; i < 81; i++) {
-      board[i] = EMPTY;
-    }
+
+    // Tie
+    return true;
   }
 
   bool print(FILE* _fp) {
@@ -107,67 +255,56 @@ struct NTTT_parser_t {
       return true;
     }
     if(_v[0].compare("newgame") == 0) {
-      /*
       player.init();
       fprintf(stdout, "= \n\n");
-      */
       return true;
     }
     if(_v[0].compare("genmove") == 0) {
-      return true;
-      /*
       int ret = player.genmove();
       if(ret == ERROR) {
         fprintf(stdout, "= ?\n\n");
         return true;
       }
       else { 
-        if(player.play(ME, ret)) { 
-          fprintf(stdout, "= %s\n\n", RPS_t::val2str(ret).c_str()); 
+        if(player.play(ret)) { 
+          fprintf(stdout, "= %d\n\n", ret); 
           return true; 
         } else {
           fprintf(stdout, "= ?\n\n");
           return true;
         }
       }
-      */
     }
     if(_v[0].compare("play") == 0) {
-      /*
       if(_v.size() != 2) {
         fprintf(stdout, "= ?\n\n");
         return true;
       }
-      if(player.play(ME, RPS_t::str2val(_v[1]))) {
+      if(player.play(std::stoi(_v[1]))) {
         fprintf(stdout, "= \n\n");
         return true;
       }
       fprintf(stdout, "= ?\n\n");
-      */
       return true; 
     }
     if(_v[0].compare("opp_play") == 0) {
-      /*
       if(_v.size() != 2) {
         fprintf(stdout, "= ?\n\n");
         return true;
       }
-      if(player.play(OPP, RPS_t::str2val(_v[1]))) {
+      if(player.play(std::stoi(_v[1]))) {
         fprintf(stdout, "= \n\n");
         return true;
       }
       fprintf(stdout, "= ?\n\n");
-      */
       return true; 
     }
     if(_v[0].compare("endgame") == 0) {
-      /*
       if(player.endgame()==false){
 	      fprintf(stdout, "= ?\n\n");
         return true;
       }
       fprintf(stdout, "= \n\n");
-      */
       return true;
     }
     if(_v[0].compare("list_commands") == 0) {
